@@ -1,0 +1,96 @@
+-- 1. What is the total amount each customer spent at the restaurant?
+select ddsal.customer_id,sum(ddmenu.price) as total_amount
+from dannys_diner.sales ddsal
+inner join
+dannys_diner.menu ddmenu on ddsal.product_id = ddmenu.product_id
+group by ddsal.customer_id 
+order by ddsal.customer_id ;
+
+-- 2. How many days has each customer visited the restaurant?
+select customer_id,count(distinct order_date)
+from dannys_diner.sales
+group by customer_id;
+
+-- 3. What was the first item from the menu purchased by each customer?
+select t1.customer_id,t2.product_name from
+(select customer_id,order_date,product_id, row_number() over(partition by customer_id order by order_date) as row_num
+from dannys_diner.sales) t1
+inner join 
+dannys_diner.menu t2 on t1.product_id = t2.product_id
+where t1.row_num = 1;
+
+-- 4. What is the most purchased item on the menu and how many times was it purchased by all customers?
+select t1.customer_id,t2.product_name,count(t1.product_id) from
+dannys_diner.sales t1
+inner join
+dannys_diner.menu t2 on t1.product_id = t2.product_id 
+where t1.product_id =
+(select t.product_id from (
+  select product_id,count(product_id) as total_count
+from dannys_diner.sales
+group by customer_id,product_id
+order by total_count Desc limit 1) t)
+group by t1.customer_id,t2.product_name;
+
+-- 5. Which item was the most popular for each customer?
+select t.customer_id,t.product_name from 
+(select t1.customer_id,t2.product_name,count(t1.product_id),rank() over(partition by customer_id order by count(t1.product_id) desc) as row_num
+from dannys_diner.sales t1
+inner join 
+dannys_diner.menu t2 on t1.product_id = t2.product_id
+group by t1.customer_id,t2.product_name) t
+where t.row_num =1;                                                                             
+-- 6. Which item was purchased first by the customer after they became a member?
+select t.customer_id,t.product_name,t.order_date from
+(select ddsal.customer_id,ddmenu.product_name,ddsal.order_date,
+row_number() over(partition by ddsal.customer_id order by ddsal.order_date) as row_num
+from dannys_diner.sales ddsal
+inner join 
+dannys_diner.menu ddmenu on ddsal.product_id = ddmenu.product_id
+inner join 
+dannys_diner.members ddmember on ddsal.customer_id = ddmember.customer_id
+where ddsal.order_date >= ddmember.join_date) t where t.row_num = 1
+;
+
+-- 7. Which item was purchased just before the customer became a member?
+select t.customer_id,t.product_name,t.order_date from
+(select ddsal.customer_id,ddmenu.product_name,ddsal.order_date,
+row_number() over(partition by ddsal.customer_id order by ddsal.order_date desc) as row_num
+from dannys_diner.sales ddsal
+inner join 
+dannys_diner.menu ddmenu on ddsal.product_id = ddmenu.product_id
+inner join 
+dannys_diner.members ddmember on ddsal.customer_id = ddmember.customer_id
+where ddsal.order_date < ddmember.join_date) t where t.row_num = 1
+;
+
+-- 8. What is the total items and amount spent for each member before they became a member?
+select ddsal.customer_id,count(ddmenu.product_name),sum(price) as total_amount
+from dannys_diner.sales ddsal
+inner join 
+dannys_diner.menu ddmenu on ddsal.product_id = ddmenu.product_id
+inner join 
+dannys_diner.members ddmember on ddsal.customer_id = ddmember.customer_id
+where ddsal.order_date < ddmember.join_date
+group by ddsal.customer_id;
+
+-- 9.  If each $1 spent equates to 10 points and sushi has a 2x points multiplier - how many points would each customer have?
+select customer_id,
+sum(case when product_name = 'sushi' then 20 * (ddmenu.price) else (10 * ddmenu.price) end) as points
+from dannys_diner.sales ddsal
+inner join
+dannys_diner.menu ddmenu on ddsal.product_id = ddmenu.product_id
+group by customer_id
+order by customer_id;
+
+-- 10. In the first week after a customer joins the program (including their join date) they earn 2x points on all items, not just sushi - how many points do customer A and B have at the end of January?
+select ddsal.customer_id,
+sum(case when ddsal.order_date between ddmember.join_date and ddmember.join_date  + INTERVAL '7 days' then (20*price) 
+    when ddsal.order_date > ddmember.join_date  + INTERVAL '7 days' then (10*price) end) as points_earned
+from
+dannys_diner.sales ddsal
+inner join
+dannys_diner.menu ddmenu on ddsal.product_id = ddmenu.product_id
+inner join
+dannys_diner.members ddmember on ddsal.customer_id = ddmember.customer_id  
+group by ddsal.customer_id;
